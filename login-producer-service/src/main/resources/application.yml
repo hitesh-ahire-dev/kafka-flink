@@ -4,3 +4,45 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+  # Database configuration (MySQL). Replace values with your environment's settings or override
+  # via environment variables (SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD).
+  datasource:
+    url: jdbc:mysql://localhost:3306/todo_app?useSSL=false&serverTimezone=UTC
+    username: root
+    password: root1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        # Hibernate 7 may not contain MySQL8Dialect class name in all distributions.
+        # It's safer to let Spring Boot detect the dialect or use MySQLDialect.
+        # If you still need to set it explicitly, use:
+        # dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Alternatively you can set the database-platform instead of direct hibernate property:
+  # database-platform: org.hibernate.dialect.MySQLDialect
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    enable:
+      all: true
+    distribution:
+      # Required so the `consumer_processing_latency_seconds_bucket` series is
+      # exposed and Grafana's histogram_quantile p95 panel has data.
+      percentiles-histogram:
+        consumer.processing.latency: true
+      sla:
+        consumer.processing.latency: 5ms,10ms,25ms,50ms,100ms,250ms,500ms,1s,2s,5s
+  endpoint:
+    prometheus:
+      enabled: true

@@ -1,0 +1,121 @@
+groups:
+  - name: login-producer-service.health
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job="spring-boot-app"} == 0
+        for: 2m
+        labels: { severity: critical, service: login-producer-service }
+        annotations:
+          summary: "login-producer-service is DOWN"
+          description: "Prometheus has not scraped {{ $labels.instance }} for 2 minutes."
+
+      - alert: HighHttpErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 1) > 0.05
+        for: 10m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "HTTP 5xx error ratio above 5%"
+          description: "{{ $value | humanizePercentage }} of HTTP requests are returning 5xx (5m window)."
+
+      - alert: HighApiLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "API p95 latency > 1s"
+          description: "p95 latency over all URIs is {{ $value }}s for 10m."
+
+      - alert: LogErrorBurst
+        expr: sum(rate(logback_events_total{level="error"}[5m])) > 0.5
+        for: 5m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Sustained ERROR log rate > 0.5/s"
+          description: "Investigate ERROR-level logs over the last 5 minutes."
+
+  - name: login-producer-service.kafka
+    interval: 30s
+    rules:
+      - alert: ConsumerLagHigh
+        expr: max by (topic) (kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 5m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Consumer lag > 1000 on {{ $labels.topic }}"
+          description: "Lag = {{ $value }} on topic {{ $labels.topic }} for 5 minutes."
+
+      - alert: ConsumerLagCritical
+        expr: max by (topic) (kafka_consumer_fetch_manager_records_lag_max) > 10000
+        for: 5m
+        labels: { severity: critical, service: login-producer-service }
+        annotations:
+          summary: "Consumer lag > 10000 on {{ $labels.topic }}"
+          description: "Lag = {{ $value }} on topic {{ $labels.topic }} for 5 minutes; consumer cannot keep up."
+
+      - alert: NoConsumptionWhenTrafficExpected
+        expr: |
+          rate(consumer_processed_count_total{topic="customer-data"}[5m]) == 0
+            and on() rate(kafka_producer_record_send_total[5m]) > 0
+        for: 10m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Producer is publishing but consumer is idle"
+          description: "Records are being produced to customer-data but the listener is not consuming. Possible consumer outage."
+
+      - alert: HighProcessingLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(consumer_processing_latency_seconds_bucket{topic="customer-data"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Customer-data p95 processing latency > 1s"
+          description: "p95 = {{ $value }}s for 10 minutes."
+
+      - alert: DltPublishingTraffic
+        # No per-topic 'send' counter from the Kafka producer client, so we detect DLT
+        # traffic via the consumer's per-topic records_consumed metric instead.
+        expr: sum(rate(kafka_consumer_fetch_manager_records_consumed_total{topic=~".*\\.DLT"}[5m])) > 0
+        for: 1m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Records being routed to a DLT"
+          description: "DLT topic {{ $labels.topic }} is receiving {{ $value }} msg/s — investigate poison messages."
+
+  - name: login-producer-service.runtime
+    interval: 30s
+    rules:
+      - alert: HeapPressure
+        expr: |
+          sum(jvm_memory_used_bytes{area="heap"}) / clamp_min(sum(jvm_memory_max_bytes{area="heap"}), 1) > 0.85
+        for: 10m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Heap utilization > 85%"
+          description: "Heap is {{ $value | humanizePercentage }} full for 10m."
+
+      - alert: GcPauseHigh
+        expr: rate(jvm_gc_pause_seconds_sum[5m]) > 0.5
+        for: 5m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "GC pause time > 0.5s/s"
+          description: "Sustained GC overhead over 5 minutes."
+
+      - alert: HikariConnectionWait
+        expr: hikaricp_connections_pending > 0
+        for: 5m
+        labels: { severity: warning, service: login-producer-service }
+        annotations:
+          summary: "Threads waiting for DB connection"
+          description: "{{ $value }} threads are pending on the Hikari pool — pool may be too small or queries too slow."
+
+      - alert: HikariConnectionTimeouts
+        expr: rate(hikaricp_connections_timeout_total[5m]) > 0
+        for: 1m
+        labels: { severity: critical, service: login-producer-service }
+        annotations:
+          summary: "Hikari connection timeouts occurring"
+          description: "DB connection acquisition timeouts at {{ $value }}/s."

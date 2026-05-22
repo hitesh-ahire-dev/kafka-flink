@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:logintestdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    show-sql: false
+
+# Bootstrap servers and listener container factory will pick up the embedded
+# Kafka broker via @EmbeddedKafka(brokerProperties=...) and DynamicPropertySource
+# in the test class, so no value is hard-coded here.
+
+management:
+  metrics:
+    enable:
+      all: true
+    distribution:
+      percentiles-histogram:
+        consumer.processing.latency: true

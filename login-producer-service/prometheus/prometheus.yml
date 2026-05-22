@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s      # How often Prometheus scrapes metrics
+  evaluation_interval: 15s  # How often rules are evaluated
+
+# Alerting rule files. Reload Prometheus (or send SIGHUP) to pick up changes.
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+
+  # Prometheus monitors itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Your Spring Boot App.
+  # When running Prometheus natively (brew/binary) alongside the app, use 'localhost:8080'.
+  # When running Prometheus in Docker via docker-compose.yml, change this to
+  # 'host.docker.internal:8080' (Docker Desktop) or use the host-gateway extra_hosts entry.
+  - job_name: 'spring-boot-app'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['localhost:8080']
